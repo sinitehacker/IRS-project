@@ -108,6 +108,10 @@ class Handler(BaseHTTPRequestHandler):
     def route(self):
         path=urlparse(self.path).path; method=self.command; parts=path.strip('/').split('/')
         if method=='GET' and path=='/': self.page(); return None, None
+        if method=='GET' and path=='/docs':
+            html = Path(__file__).with_name('docs.html').read_bytes()
+            self.send_response(200); self.send_header('Content-Type','text/html; charset=utf-8'); self.send_header('Content-Length',str(len(html))); self.end_headers(); self.wfile.write(html)
+            return None, None
         if method=='GET' and path=='/health': return {'status':'ok','service':'promotional-pricing-engine'},200
         if method=='GET' and path=='/openapi.json': return OPENAPI,200
         if path=='/api/v1/bills/calculate' and method=='POST': return calculate(self.read()),200
