@@ -98,11 +98,15 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): logging.info('%s - %s', self.headers.get('X-Correlation-ID','-'), fmt % args)
     def send(self, body, status=200):
         data=json.dumps(body, default=str).encode(); self.send_response(status); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(data))); self.send_header('X-Correlation-ID',self.headers.get('X-Correlation-ID',str(uuid.uuid4()))); self.end_headers(); self.wfile.write(data)
+    def page(self):
+        html='''<!doctype html><html><head><meta charset="utf-8"><title>ShopperStop Pricing Engine</title><style>body{font:16px system-ui;max-width:760px;margin:40px auto;padding:0 20px;background:#f7f7fb;color:#172033}h1{color:#b4003a}textarea,select,button{font:inherit;padding:10px;border-radius:6px;border:1px solid #ccd}textarea{width:100%;height:180px;box-sizing:border-box}button{background:#b4003a;color:white;border:0;margin:12px 0;cursor:pointer}pre{background:#172033;color:#eaf2ff;padding:16px;white-space:pre-wrap;border-radius:8px}code{background:#eee;padding:2px 4px}</style></head><body><h1>ShopperStop Pricing Engine</h1><p>Calculate a bill using progressive customer-tier discounts. Use the sample cart or edit its JSON.</p><textarea id="payload">{"customer":{"tier":"premium"},"items":[{"name":"Television","category":"Electronics","quantity":1,"unitPrice":15000}]}</textarea><br><button onclick="calculate()">Calculate bill</button><pre id="result">Result appears here.</pre><p>API: <code>POST /api/v1/bills/calculate</code> · <a href="/health">health</a> · <a href="/openapi.json">OpenAPI</a></p><script>async function calculate(){const out=document.getElementById('result');try{let r=await fetch('/api/v1/bills/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:document.getElementById('payload').value});out.textContent=JSON.stringify(await r.json(),null,2)}catch(e){out.textContent=e.message}}</script></body></html>'''.encode()
+        self.send_response(200); self.send_header('Content-Type','text/html; charset=utf-8'); self.send_header('Content-Length',str(len(html))); self.end_headers(); self.wfile.write(html)
     def read(self):
         try: return json.loads(self.rfile.read(int(self.headers.get('Content-Length','0')) or 0) or '{}')
         except json.JSONDecodeError: raise ValueError('request body must be valid JSON')
     def route(self):
         path=urlparse(self.path).path; method=self.command; parts=path.strip('/').split('/')
+        if method=='GET' and path=='/': self.page(); return None, None
         if method=='GET' and path=='/health': return {'status':'ok','service':'promotional-pricing-engine'},200
         if method=='GET' and path=='/openapi.json': return OPENAPI,200
         if path=='/api/v1/bills/calculate' and method=='POST': return calculate(self.read()),200
@@ -132,7 +136,8 @@ class Handler(BaseHTTPRequestHandler):
         return error('route not found',404)
     def do_any(self):
         try:
-            body,status=self.route(); self.send(body,status)
+            body,status=self.route()
+            if status is not None: self.send(body,status)
         except ValueError as exc: self.send(*error(str(exc)))
         except Exception: logging.exception('Unhandled error'); self.send({'error':{'code':'INTERNAL_ERROR','message':'internal server error'}},500)
     do_GET=do_POST=do_PUT=do_DELETE=do_any
